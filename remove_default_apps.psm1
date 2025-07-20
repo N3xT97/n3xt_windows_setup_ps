@@ -1,3 +1,65 @@
+ï»¿function Write-Log {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+        [ValidateSet("INFO", "WARN", "ERROR", "SUCCESS", "STEP")]
+        [string]$Level
+    )
+
+    $prefix = switch ($Level) {
+        "INFO" { "[+]" ; $color = "White" }
+        "WARN" { "[!]" ; $color = "Yellow" }
+        "ERROR" { "[-]" ; $color = "Red" }
+        "SUCCESS" { "[*]" ; $color = "Green" }
+        "STEP" { "[>]" ; $color = "Cyan" }
+    }
+
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Host "$prefix [$time] $Message" -ForegroundColor $color
+}
+
+function Remove-LocalApp {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$appName
+    )
+    $localApp = Get-AppxPackage | Where-Object { $_.Name -like "*$appName*" }
+    if (!$localApp) {
+        Write-Log "Local ì•±ì„ ì°¾ì„ ìˆ˜ ì—†ìŒ: $appName" -Level "WARN"
+        return
+    }
+
+    try {
+        $localApp | Remove-AppxPackage -ErrorAction Stop | Out-Null
+        Write-Log "Local ì•± ì œê±° ì™„ë£Œ: $appName" -Level "INFO"
+    }
+    catch {
+        Write-Log "Local ì•± ì œê±° ì‹¤íŒ¨: $appName ($($_.Exception.Message))" -Level "ERROR"
+    }
+}
+
+function Remove-ProvisionedApp {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$appName
+    )
+    $provApp = Get-ProvisionedAppxPackage -Online | Where-Object { $_.PackageName -like "*$appName*" }
+    if (!$provApp) {
+        Write-Log "Provisioned ì•±ì„ ì°¾ì„ ìˆ˜ ì—†ìŒ: $appName" -Level "WARN"
+        return
+    }
+
+    try {
+        $provApp | Remove-ProvisionedAppxPackage -Online -ErrorAction Stop | Out-Null
+        Write-Log "Provisioned ì•± ì œê±° ì™„ë£Œ: $appName" -Level "INFO"
+    }
+    catch {
+        Write-Log "Provisioned ì•± ì œê±° ì‹¤íŒ¨: $appName ($($_.Exception.Message))" -Level "ERROR"
+    }
+}
+
 function Remove-DefaultApps {
     $removableApps = @(
         # "Microsoft.AAD.BrokerPlugin",
@@ -86,39 +148,24 @@ function Remove-DefaultApps {
         "Microsoft.ZuneMusic",
         "Microsoft.ZuneVideo"
     )
-    
-    Write-Host "`n[!] ´ÙÀ½ ±âº» ¾ÛµéÀÌ Á¦°ÅµË´Ï´Ù:" -ForegroundColor Yellow
+
+    Write-Log "`në‹¤ìŒ ê¸°ë³¸ ì•±ë“¤ì´ ì œê±°ë©ë‹ˆë‹¤:" -Level "WARN"
     $removableApps | ForEach-Object { Write-Host " - $_" }
 
-    $confirm = Read-Host "Á¤¸»·Î ÀÌ ¾ÛµéÀ» Á¦°ÅÇÏ½Ã°Ú½À´Ï±î? (Y/N)"
+    $confirm = Read-Host "ì •ë§ë¡œ ì´ ì•±ë“¤ì„ ì œê±°í•˜ì‹œê² ìŠµë‹ˆê¹Œ? (Y/N)"
     if ($confirm -ne 'Y') {
-        Write-Host "`n[*] ÀÛ¾÷À» Ãë¼ÒÇß½À´Ï´Ù."
+        Write-Log "ì‘ì—…ì„ ì·¨ì†Œí–ˆìŠµë‹ˆë‹¤." -Level "WARN"
         return
     }
 
-    Write-Host "`n[+] ±âº» ¾Û Á¦°Å ½ÃÀÛ..."
-    foreach ($app in $removableApps) {
-        try {
-            Get-AppxPackage -Name $app | Remove-AppxPackage -ErrorAction Stop
-            Write-Host " - Local ¾Û Á¦°Å ¿Ï·á: $app" -ForegroundColor Cyan
-        }
-        catch {
-            Write-Host " - Local ¾Û Á¦°Å ½ÇÆĞ: $app ($($_.Exception.Message))" -ForegroundColor Red
-        }
+    Write-Log "ê¸°ë³¸ ì•± ì œê±°ë¥¼ ì‹œì‘í•©ë‹ˆë‹¤." -Level "STEP"
 
-        try {
-            $provApp = Get-ProvisionedAppxPackage -Online | Where-Object { $_.PackageName -like "*$app*" }
-            if ($provApp) {
-                $provApp | Remove-ProvisionedAppxPackage -Online -ErrorAction Stop | Out-Null
-                Write-Host " - Provisioned ¾Û Á¦°Å ¿Ï·á: $app" -ForegroundColor Cyan
-            }
-        }
-        catch {
-            Write-Host " - Provisioned ¾Û Á¦°Å ½ÇÆĞ: $app ($($_.Exception.Message))" -ForegroundColor Red
-        }
+    foreach ($app in $removableApps) {
+        Remove-LocalApp -appName $app
+        Remove-ProvisionedApp -appName $app
     }
-    Write-Host "`n[*] ±âº» ¾Û Á¦°Å ¿Ï·á`n" -ForegroundColor Green
+
+    Write-Log "ê¸°ë³¸ ì•± ì œê±°ê°€ ì™„ë£ŒëìŠµë‹ˆë‹¤." -Level "SUCCESS"
 }
 
-Export-ModuleMember -Function Remove-defaultApps
-
+Export-ModuleMember -Function Remove-DefaultApps
