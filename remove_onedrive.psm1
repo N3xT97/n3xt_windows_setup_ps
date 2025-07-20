@@ -1,69 +1,74 @@
-function Remove-OneDrive {
-    # ÈçÀû Á¦°Å °æ·Î ¸ñ·Ï
-    $pathsToRemove = @(
-        "$env:UserProfile\OneDrive",
-        "$env:LocalAppData\Microsoft\OneDrive",
-        "$env:ProgramData\Microsoft OneDrive"
+ï»¿function Write-Log {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+        [ValidateSet("INFO", "WARN", "ERROR", "SUCCESS", "STEP")]
+        [string]$Level
     )
-    $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-    $regName = "OneDrive"
 
-    
-    Write-Host "`n[!] OneDrive °ü·Ã ÆÄÀÏµéÀÌ Á¦°ÅµË´Ï´Ù:" -ForegroundColor Yellow
-    $pathsToRemove | ForEach-Object { Write-Host " - $_" }
-    Write-Host " - $regPath\$regName"
+    $prefix = switch ($Level) {
+        "INFO" { "[+]" ; $color = "White" }
+        "WARN" { "[!]" ; $color = "Yellow" }
+        "ERROR" { "[-]" ; $color = "Red" }
+        "SUCCESS" { "[*]" ; $color = "Green" }
+        "STEP" { "[>]" ; $color = "Cyan" }
+    }
 
-    $confirm = Read-Host "Á¤¸»·Î Á¦°ÅÇÏ½Ã°Ú½À´Ï±î? (Y/N)"
-    if ($confirm -ne 'Y') {
-        Write-Host "`n[*] ÀÛ¾÷À» Ãë¼ÒÇß½À´Ï´Ù."
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Host "$prefix [$timestamp] $Message" -ForegroundColor $color
+}
+
+function Test-OneDriveInstalled {
+    $exePath = "$env:LOCALAPPDATA\Microsoft\OneDrive\OneDrive.exe"
+    if (Test-Path $exePath) {
+        Write-Host " - OneDrive ì„¤ì¹˜ê°€ í™•ì¸ë¨."
+        return $true
+    }
+    else {
+        Write-Host " - OneDrive ì„¤ì¹˜ê°€ í™•ì¸ë˜ì§€ ì•ŠìŒ."
+        return $false
+    }
+}
+
+function Remove-OneDrive {
+    Write-Log "`nOneDriveê°€ ì œê±°ë©ë‹ˆë‹¤:" -Level "WARN"
+
+    if (-not (Test-OneDriveInstalled)) {
+        Write-Log "Onedriveê°€ ì„¤ì¹˜ë¼ìˆì§€ ì•ŠìŠµë‹ˆë‹¤." -Level "SUCCESS"
         return
     }
 
-    Write-Host "`n[+] OneDrive ¼³Ä¡ Á¦°Å ½ÃÀÛ..."
+    $confirm = Read-Host "ì •ë§ë¡œ ì œê±°í•˜ì‹œê² ìŠµë‹ˆê¹Œ? (Y/N)"
+    if ($confirm -ne 'Y') {
+        Write-Log "ì‘ì—…ì„ ì·¨ì†Œí–ˆìŠµë‹ˆë‹¤." -Level "WARN"
+        return
+    }
 
-    $exe = if ([Environment]::Is64BitOperatingSystem) {
+    # ì„¤ì¹˜ ì œê±°
+    Write-Log "OneDrive ì„¤ì¹˜ ì œê±°ë¥¼ ì‹œì‘í•©ë‹ˆë‹¤." -Level "STEP"
+    $onedriveExe = if ([Environment]::Is64BitOperatingSystem) {
         "$env:SystemRoot\SysWOW64\OneDriveSetup.exe"
     }
     else {
         "$env:SystemRoot\System32\OneDriveSetup.exe"
     }
 
-    if (Test-Path $exe) {
-        Start-Process $exe -ArgumentList "/uninstall" -Wait
-        Write-Host " - OneDrive ¼³Ä¡ Á¦°Å ¿Ï·á" -ForegroundColor Cyan
+    if (Test-Path $onedriveExe) {
+        try {
+            Start-Process $onedriveExe -ArgumentList "/uninstall" -Wait -NoNewWindow
+            Write-Log "OneDrive ì„¤ì¹˜ ì œê±° ì™„ë£Œ." -Level "INFO"
+        }
+        catch {
+            Write-Log "OneDrive ì œê±° ì‹¤íŒ¨: $($_.Exception.Message)" -Level "ERROR"
+            return
+        }
     }
     else {
-        Write-Host " - OneDrive ¼³Ä¡ ÆÄÀÏÀ» Ã£À» ¼ö ¾ø½À´Ï´Ù." -ForegroundColor Red
+        Write-Log "OneDrive ì„¤ì¹˜ íŒŒì¼ì„ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤: $onedriveExe" -Level "ERROR"
         return
     }
 
-    
-    Write-Host "`n[+] OneDrive ÈçÀû Á¦°Å ½ÃÀÛ..."
-    
-
-    foreach ($path in $pathsToRemove) {        
-        try {
-            Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host " - °æ·Î Á¦°Å ¿Ï·á: $path" -ForegroundColor Cyan
-            
-        }
-        catch {
-            Write-Host " - °æ·Î Á¦°Å ½ÇÆĞ: $path" -ForegroundColor Red
-        }
-    }
-
-    $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-    $regName = "OneDrive"
-    try {
-        Set-ItemProperty -Path $regPath  -Name $regName -Value $null -ErrorAction SilentlyContinue
-        Write-Host " - ·¹Áö½ºÆ®¸® Á¦°Å ¿Ï·á: $regPath\$regName" -ForegroundColor Cyan
-        
-    }
-    catch {
-        Write-Host " - ·¹Áö½ºÆ®¸® Á¦°Å ½ÇÆĞ: $regPath\$regName" -ForegroundColor Red
-    }
-    Write-Host "`n[*] OneDrive Á¦°Å ¿Ï·á`n" -ForegroundColor Green
+    Write-Log "OneDrive ì œê±° í”„ë¡œì„¸ìŠ¤ê°€ ì™„ë£ŒëìŠµë‹ˆë‹¤." -Level "SUCCESS"
 }
-
 
 Export-ModuleMember -Function Remove-OneDrive
